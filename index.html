@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sur — scale detector</title>
+<style>
+  :root {
+    --paper: #F1ECE2;
+    --ink: #2B2B2B;
+    --muted: #8A8378;
+    --line: #D8CFBD;
+    --accent: #D85A30;
+    --teal: #2A9D8F;
+    --screen: #16140F;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 24px 16px 48px;
+    background: var(--paper); color: var(--ink);
+    font: 16px/1.6 "Trebuchet MS", "Segoe UI", system-ui, sans-serif;
+    display: flex; flex-direction: column; align-items: center;
+  }
+  h1 { font-size: 20px; font-weight: 500; margin: 0 0 2px; letter-spacing: .02em; }
+  .sub { color: var(--muted); font-size: 14px; margin-bottom: 24px; text-align: center; }
+  .screen {
+    width: 300px; height: 300px; border-radius: 50%;
+    background: var(--screen); display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 6px;
+    border: 10px solid #B5AFA0;
+  }
+  .badge {
+    font-size: 11px; letter-spacing: .12em; text-transform: uppercase;
+    background: #3A342C; color: #8A8378;
+    padding: 3px 12px; border-radius: 10px;
+  }
+  .badge.on { background: var(--accent); color: #FAECE7; }
+  .note { font-size: 76px; line-height: 1; color: #F3EFE6; font-weight: 500; }
+  .scale { font-size: 15px; color: #A8A296; }
+  .sargam { font-size: 14px; color: #4FC3A8; letter-spacing: .18em; }
+  .conf { width: 300px; margin-top: 18px; }
+  .conf-label { display: flex; justify-content: space-between; font-size: 13px; color: var(--muted); }
+  .bar { height: 5px; background: var(--line); border-radius: 3px; overflow: hidden; margin-top: 5px; }
+  .bar > i { display: block; height: 100%; width: 0; background: var(--teal); transition: width .2s; }
+  canvas { width: 300px; height: 92px; margin-top: 20px; }
+  .row { display: flex; gap: 10px; margin-top: 20px; }
+  button {
+    font: inherit; font-size: 15px; padding: 10px 22px; cursor: pointer;
+    border: 1px solid var(--line); border-radius: 8px;
+    background: #fff; color: var(--ink);
+  }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button:disabled { opacity: .4; cursor: default; }
+  .status { margin-top: 14px; font-size: 14px; color: var(--muted); min-height: 22px; text-align: center; max-width: 340px; }
+</style>
+</head>
+<body>
+
+<h1>Sur</h1>
+<div class="sub">Play or sing a scale. It finds the tonic and names it in both systems.</div>
+
+<div class="screen">
+  <div class="badge" id="badge">listening</div>
+  <div class="note" id="note">·</div>
+  <div class="scale" id="scale">waiting for a pattern</div>
+  <div class="sargam" id="sargam"></div>
+</div>
+
+<div class="conf">
+  <div class="conf-label"><span>Confidence</span><span id="confText">0%</span></div>
+  <div class="bar"><i id="confBar"></i></div>
+</div>
+
+<canvas id="chroma" width="600" height="184"></canvas>
+
+<div class="row">
+  <button class="primary" id="startBtn">Start listening</button>
+  <button id="resetBtn" disabled>Reset</button>
+</div>
+
+<div class="status" id="status">Needs microphone access. Nothing is recorded or uploaded.</div>
+
+<script>
+'use strict';
+
+// Same algorithm as sur.cpp in this repo: peak-picked chromagram, then
+// Krumhansl-Schmuckler correlation biased by sustained energy, then a lock
+// state machine so the answer holds still once found.
+
+const NOTES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+const SWARA = ['S','r','R','g','G','m','M','P','d','D','n','N'];
+
+const SCALES = [
+  { western:'Major',           thaat:'Bilaval',  degrees:[0,2,4,5,7,9,11] },
+  { western:'Natural minor',   thaat:'Asavari',  degrees:[0,2,3,5,7,8,10] },
+  { western:'Harmonic minor',  thaat:'Kirwani',  degrees:[0,2,3,5,7,8,11] },
+  { western:'Dorian',          thaat:'Kafi',     degrees:[0,2,3,5,7,9,10] },
+  { western:'Mixolydian',      thaat:'Khamaj',   degrees:[0,2,4,5,7,9,10] },
+  { western:'Phrygian',        thaat:'Bhairavi', degrees:[0,1,3,5,7,8,10] },
+];
+
+const KS_MAJOR = [6.35,2.23,3.48,2.33,4.38,4.09,2.52,5.19,2.39,3.66,2.29,2.88];
+const KS_MINOR = [6.33,2.68,3.52,5.38,2.60,3.53,2.54,4.75,3.98,2.69,3.34,3.17];
+
+const SUSTAIN_BIAS = 0.18;
+const A4 = 440;
+
+const els = {
+  badge:   document.getElementById('badge'),
+  note:    document.getElementById('note'),
+  scale:   document.getElementById('scale'),
+  sargam:  document.getElementById('sargam'),
+  confText:document.getElementById('confText'),
+  confBar: document.getElementById('confBar'),
+  canvas:  document.getElementById('chroma'),
+  start:   document.getElementById('startBtn'),
+  reset:   document.getElementById('resetBtn'),
+  status:  document.getElementById('status'),
+};
+
+let ctx = null, analyser = null, stream = null, raf = 0;
+let freqBuf = null, timeBuf = null, mags = null;
+let running = false, lastTime = 0, frames = 0;
+
+const state = {
+  fast: new Float32Array(12),
+  slow: new Float32Array(12),
+  voiced: 0,
+  history: [],
+  challenger: -1,
+  challengerCount: 0,
+  current: { tonic: -1, scale: null, confidence: 0, locked: false },
+};
+
+function resetState() {
+  state.fast.fill(0);
+  state.slow.fill(0);
+  state.voiced = 0;
+  state.history = [];
+  state.challenger = -1;
+  state.challengerCount = 0;
+  state.current = { tonic: -1, scale: null, confidence: 0, locked: false };
+  frames = 0;
+  render();
+}
+
+// --- spectrum to 12 pitch classes ------------------------------------------
+
+function chromaFrame(out) {
+  const binHz = ctx.sampleRate / analyser.fftSize;
+  let lo = Math.ceil(55 / binHz);   if (lo < 2) lo = 2;
+  let hi = Math.floor(2200 / binHz); if (hi > mags.length - 2) hi = mags.length - 2;
+  out.fill(0);
+  if (lo >= hi) return 0;
+
+  let loudest = 0;
+  for (let b = lo; b <= hi; b++) if (mags[b] > loudest) loudest = mags[b];
+  if (loudest <= 1e-7) return 0;
+
+  let total = 0;
+  for (let b = lo; b <= hi; b++) {
+    const m = mags[b];
+    // Peaks only — summing every bin smears energy over every pitch class.
+    if (m < loudest * 0.001 || m <= mags[b - 1] || m < mags[b + 1]) continue;
+
+    // Parabolic interpolation, or low notes land on the wrong semitone.
+    const den = mags[b - 1] - 2 * m + mags[b + 1];
+    let shift = den !== 0 ? 0.5 * (mags[b - 1] - mags[b + 1]) / den : 0;
+    shift = Math.max(-0.5, Math.min(0.5, shift));
+
+    const freq = (b + shift) * binHz;
+    const midi = 69 + 12 * Math.log2(freq / A4);
+    const semitone = Math.round(midi);
+    const cents = (midi - semitone) * 100;
+    const w = Math.pow(m, 0.7) * Math.exp(-0.5 * cents * cents / 1225);
+
+    out[((semitone % 12) + 12) % 12] += w;
+    total += w;
+  }
+  return total;
+}
+
+// --- Krumhansl-Schmuckler ---------------------------------------------------
+
+function correlate(chroma, profile, rot) {
+  let mc = 0, mp = 0;
+  for (let i = 0; i < 12; i++) { mc += chroma[i]; mp += profile[i]; }
+  mc /= 12; mp /= 12;
+  let num = 0, vc = 0, vp = 0;
+  for (let i = 0; i < 12; i++) {
+    const a = chroma[(i + rot) % 12] - mc;
+    const b = profile[i] - mp;
+    num += a * b; vc += a * a; vp += b * b;
+  }
+  const den = Math.sqrt(vc * vp);
+  return den > 0 ? num / den : 0;
+}
+
+function estimate() {
+  let slowMax = 0;
+  for (let i = 0; i < 12; i++) if (state.slow[i] > slowMax) slowMax = state.slow[i];
+
+  const score = new Float32Array(12);
+  for (let t = 0; t < 12; t++) {
+    const a = correlate(state.fast, KS_MAJOR, t);
+    const b = correlate(state.fast, KS_MINOR, t);
+    score[t] = Math.max(a, b);
+    // The tie-break: a tonic and its relative minor share a note set, so the
+    // correlation cannot separate them. Sustained energy can.
+    if (slowMax > 0) score[t] += SUSTAIN_BIAS * (state.slow[t] / slowMax);
+  }
+
+  let best = 0;
+  for (let t = 1; t < 12; t++) if (score[t] > score[best]) best = t;
+  let rival = -2;
+  for (let t = 0; t < 12; t++) if (t !== best && score[t] > rival) rival = score[t];
+
+  let conf = Math.max(0, Math.min(1, (score[best] - rival) * 5));
+  conf *= Math.min(1, state.voiced / 4);
+
+  let sum = 0;
+  const rel = new Float32Array(12);
+  for (let i = 0; i < 12; i++) { rel[i] = state.fast[(best + i) % 12]; sum += rel[i]; }
+  let scale = null, bestFit = -1;
+  if (sum > 0) {
+    for (const s of SCALES) {
+      let cover = 0;
+      for (const d of s.degrees) cover += rel[d];
+      if (cover / sum > bestFit) { bestFit = cover / sum; scale = s; }
+    }
+  }
+
+  // Easy to lock, hard to unlock.
+  const cur = state.current;
+  if (cur.locked) {
+    if (best === cur.tonic) {
+      state.challengerCount = 0;
+      cur.scale = scale;
+      if (conf > cur.confidence) cur.confidence = conf;
+    } else {
+      state.challengerCount = (best === state.challenger) ? state.challengerCount + 1 : 1;
+      state.challenger = best;
+      if (state.challengerCount >= 14 && conf >= 0.45) {
+        state.current = { tonic: best, scale, confidence: conf, locked: true };
+        state.challengerCount = 0;
+      }
+    }
+    return;
+  }
+
+  state.history.push(best);
+  if (state.history.length > 4) state.history.shift();
+  state.current = { tonic: best, scale, confidence: conf, locked: false };
+
+  const steady = state.history.length === 4 && state.history.every(t => t === state.history[0]);
+  if (steady && conf >= 0.40 && state.voiced >= 2.2) {
+    state.current.locked = true;
+    els.status.textContent = 'Locked. Press reset to detect something else.';
+  }
+}
+
+// --- loop -------------------------------------------------------------------
+
+function loop() {
+  if (!running) return;
+  raf = requestAnimationFrame(loop);
+
+  const now = performance.now();
+  const dt = Math.min(0.1, (now - lastTime) / 1000);
+  lastTime = now;
+
+  analyser.getFloatTimeDomainData(timeBuf);
+  let rms = 0;
+  for (let i = 0; i < timeBuf.length; i++) rms += timeBuf[i] * timeBuf[i];
+  rms = Math.sqrt(rms / timeBuf.length);
+
+  if (rms > 0.004) {
+    analyser.getFloatFrequencyData(freqBuf);
+    for (let i = 0; i < freqBuf.length; i++) mags[i] = Math.pow(10, freqBuf[i] / 20);
+
+    const frame = new Float32Array(12);
+    const total = chromaFrame(frame);
+    if (total > 0) {
+      const fastDecay = Math.exp(-dt / 8);
+      const slowDecay = Math.exp(-dt / 30);
+      const weight = Math.min(1, rms / 0.02);
+      for (let i = 0; i < 12; i++) {
+        const v = frame[i] / total;
+        state.fast[i] = state.fast[i] * fastDecay + v * weight;
+        state.slow[i] = state.slow[i] * slowDecay + v * weight;
+      }
+      state.voiced += dt;
+      if (++frames >= 4 && state.voiced > 0.6) { frames = 0; estimate(); }
+    }
+  }
+
+  render();
+  draw();
+}
+
+function render() {
+  const r = state.current;
+  els.note.textContent = r.tonic >= 0 ? NOTES[r.tonic] : '·';
+  if (r.scale && r.tonic >= 0) {
+    els.scale.textContent = r.scale.thaat + ' · ' + r.scale.western;
+    els.sargam.textContent = r.scale.degrees.map(d => SWARA[d]).join(' ');
+  } else {
+    els.scale.textContent = 'waiting for a pattern';
+    els.sargam.textContent = '';
+  }
+  const pct = Math.round(r.confidence * 100);
+  els.confText.textContent = pct + '%';
+  els.confBar.style.width = pct + '%';
+  els.badge.textContent = r.locked ? 'locked' : 'listening';
+  els.badge.classList.toggle('on', r.locked);
+}
+
+function draw() {
+  const c = els.canvas, g = c.getContext('2d');
+  const w = c.width, h = c.height;
+  g.clearRect(0, 0, w, h);
+
+  let max = 0.0001;
+  for (let i = 0; i < 12; i++) if (state.fast[i] > max) max = state.fast[i];
+
+  const tonic = state.current.tonic;
+  const inScale = new Set();
+  if (state.current.scale && tonic >= 0)
+    for (const d of state.current.scale.degrees) inScale.add((tonic + d) % 12);
+
+  const bw = w / 12;
+  for (let i = 0; i < 12; i++) {
+    const bh = (state.fast[i] / max) * (h - 34);
+    g.fillStyle = i === tonic ? '#D85A30' : (inScale.has(i) ? '#2A9D8F' : '#D8CFBD');
+    g.fillRect(i * bw + bw * 0.18, h - 26 - bh, bw * 0.64, bh);
+    g.fillStyle = '#8A8378';
+    g.font = '20px "Trebuchet MS", sans-serif';
+    g.textAlign = 'center';
+    g.fillText(NOTES[i], i * bw + bw / 2, h - 6);
+  }
+}
+
+// --- wiring -----------------------------------------------------------------
+
+async function start() {
+  try {
+    ctx = new (window.AudioContext || window.webkitAudioContext)();
+    if (ctx.state === 'suspended') await ctx.resume();
+
+    // Browser voice processing destroys the spectrum. All three must be off.
+    stream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
+    });
+
+    analyser = ctx.createAnalyser();
+    analyser.fftSize = 8192;
+    analyser.smoothingTimeConstant = 0;
+    ctx.createMediaStreamSource(stream).connect(analyser);
+
+    freqBuf = new Float32Array(analyser.frequencyBinCount);
+    mags    = new Float32Array(analyser.frequencyBinCount);
+    timeBuf = new Float32Array(2048);
+
+    resetState();
+    running = true;
+    lastTime = performance.now();
+    els.start.textContent = 'Stop';
+    els.start.classList.remove('primary');
+    els.reset.disabled = false;
+    els.status.textContent = 'Listening. Play a scale slowly, and hold the first and last note a little longer.';
+    loop();
+  } catch (err) {
+    els.status.textContent = 'Could not access the microphone. Check browser permissions.';
+  }
+}
+
+function stop() {
+  running = false;
+  cancelAnimationFrame(raf);
+  if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
+  els.start.textContent = 'Start listening';
+  els.start.classList.add('primary');
+  els.reset.disabled = true;
+  els.status.textContent = 'Stopped.';
+}
+
+els.start.addEventListener('click', () => running ? stop() : start());
+els.reset.addEventListener('click', () => {
+  resetState();
+  els.status.textContent = 'Cleared. Play something.';
+});
+
+render();
+draw();
+</script>
+</body>
+</html>
