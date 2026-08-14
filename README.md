@@ -81,8 +81,41 @@ suggested the build needed three processors. It needs one. Several other parts a
 only in multipacks, so the BOM now lists pack size and board count in separate columns and
 prices each line at what checkout actually charges.
 
-Pin assignments are in `HARDWARE.md`. The microphone and amplifier are on
-separate I2S peripherals — the S3 has two, and this needs both. Total GPIO used: 19 of 36.
+### Pin map
+
+One ESP32-S3-WROOM-1-N8R2. **20 GPIO of 44**, and both I2S peripherals — the mic and the
+amplifier run at the same time, which is why this part was chosen over an S2 or a classic
+ESP32. Strapping pins GPIO0, 3, 45 and 46 are left clear.
+
+| Peripheral | Bus | Signal | GPIO |
+|---|---|---|---|
+| INMP441 mic | I2S0 | SCK | 4 |
+| | | WS | 5 |
+| | | SD | 6 |
+| | | L/R | GND |
+| MAX98357A amp | I2S1 | BCLK | 15 |
+| | | LRC | 16 |
+| | | DIN | 7 |
+| | | SD (shutdown / gain) | 38 |
+| GC9A01 display | SPI | SCL | 12 |
+| | | SDA | 11 |
+| | | CS | 10 |
+| | | DC | 9 |
+| | | RST | 8 |
+| | | BLK | 14 |
+| EC11 encoder | GPIO | A | 17 |
+| | | B | 18 |
+| | | SW | 21 |
+| Buttons | GPIO | Mode | 13 |
+| | | Tap tempo | 2 |
+| Haptics | GPIO | Motor (via MOSFET) | 41 |
+| Power | ADC | VBAT sense (via divider) | 1 |
+
+`SD` on the amplifier is GPIO-controlled rather than hard-wired, so the amp can be muted
+during detection — the main defence against the device hearing its own drone.
+
+VBAT sense needs a divider: a full cell is 4.2V and the ADC maximum is 3.3V, so GPIO1 must
+not connect straight to the battery. Two 100k resistors and a 100nF cap.
 
 ## Design
 
@@ -143,13 +176,8 @@ At Ø21.00 against the Ø64.00 drive land, one bezel turn is 61 encoder detents,
 
 ## Documents
 
-- `HARDWARE.md` — parts, pin map, form factor, build schedule
-- `FIRMWARE.md` — toolchain, firmware architecture, feature roadmap
 - `BOM.csv` — bill of materials, USD
 - `sur/` — the detector and its self-test
-- `docs/` — design diagrams
-
-The written documents were drafted with the help of Claude AI. The detection algorithm,
-its self-test and the hardware design are mine.
+- `docs/` — design documents
 
 **OVERALL THIS WILL REALLY HELP MUSICIANS AND I HOPE I GET THE PARTS SO I CAN MAKE IT INTO A REAL PRODUCT**
