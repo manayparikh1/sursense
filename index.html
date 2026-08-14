@@ -43,7 +43,7 @@
   .bar { height: 5px; background: var(--line); border-radius: 3px; overflow: hidden; margin-top: 5px; }
   .bar > i { display: block; height: 100%; width: 0; background: var(--teal); transition: width .2s; }
   canvas { width: 300px; height: 92px; margin-top: 20px; }
-  .row { display: flex; gap: 10px; margin-top: 20px; }
+  .row { display: flex; gap: 10px; margin-top: 20px; flex-wrap: wrap; justify-content: center; }
   button {
     font: inherit; font-size: 15px; padding: 10px 22px; cursor: pointer;
     border: 1px solid var(--line); border-radius: 8px;
@@ -51,6 +51,17 @@
   }
   button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
   button:disabled { opacity: .4; cursor: default; }
+  .modes { display: flex; gap: 6px; margin: 22px 0 4px; }
+  .modes button { padding: 7px 15px; font-size: 14px; border-radius: 20px; }
+  .modes button.on { background: var(--ink); border-color: var(--ink); color: var(--paper); }
+  .view { display: none; flex-direction: column; align-items: center; gap: 6px; }
+  .view.on { display: flex; }
+  .big { font-size: 62px; line-height: 1; color: #F3EFE6; font-weight: 500; }
+  .cents { font-size: 17px; color: #4FC3A8; }
+  .dots { display: flex; gap: 9px; margin-bottom: 8px; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; background: #3A342C; }
+  .dot.sam { box-shadow: 0 0 0 2px #5A5248; }
+  .dot.now { background: var(--accent); }
   .status { margin-top: 14px; font-size: 14px; color: var(--muted); min-height: 22px; text-align: center; max-width: 340px; }
 </style>
 </head>
@@ -60,10 +71,36 @@
 <div class="sub">Play or sing a scale. It finds the tonic and names it in both systems.</div>
 
 <div class="screen">
-  <div class="badge" id="badge">listening</div>
-  <div class="note" id="note">·</div>
-  <div class="scale" id="scale">waiting for a pattern</div>
-  <div class="sargam" id="sargam"></div>
+  <div class="view on" id="viewScale">
+    <div class="badge" id="badge">listening</div>
+    <div class="note" id="note">·</div>
+    <div class="scale" id="scale">waiting for a pattern</div>
+    <div class="sargam" id="sargam"></div>
+  </div>
+
+  <div class="view" id="viewTuner">
+    <div class="big" id="tunerNote">·</div>
+    <div class="cents" id="tunerCents">play a note</div>
+  </div>
+
+  <div class="view" id="viewMetro">
+    <div class="dots" id="dots"></div>
+    <div class="big" id="bpmText">90</div>
+    <div class="scale">bpm · teental 16</div>
+  </div>
+
+  <div class="view" id="viewDrone">
+    <div class="big" id="droneNote">C</div>
+    <div class="scale" id="droneHz">Sa · 130.8 Hz</div>
+    <div class="sargam" id="droneState">stopped</div>
+  </div>
+</div>
+
+<div class="modes">
+  <button class="on" data-mode="scale">Scale</button>
+  <button data-mode="tuner">Tuner</button>
+  <button data-mode="metro">Metronome</button>
+  <button data-mode="drone">Drone</button>
 </div>
 
 <div class="conf">
@@ -73,9 +110,22 @@
 
 <canvas id="chroma" width="600" height="184"></canvas>
 
-<div class="row">
+<div class="row" id="rowListen">
   <button class="primary" id="startBtn">Start listening</button>
   <button id="resetBtn" disabled>Reset</button>
+</div>
+
+<div class="row" id="rowMetro" style="display:none">
+  <button id="bpmDown">−</button>
+  <button id="tapBtn">Tap tempo</button>
+  <button id="bpmUp">+</button>
+  <button class="primary" id="metroBtn">Start</button>
+</div>
+
+<div class="row" id="rowDrone" style="display:none">
+  <button class="primary" id="saBtn">Sa</button>
+  <button id="saPaBtn">Sa + Pa</button>
+  <button id="droneStop">Stop</button>
 </div>
 
 <div class="status" id="status">Needs microphone access. Nothing is recorded or uploaded.</div>
@@ -116,6 +166,17 @@ const els = {
   start:   document.getElementById('startBtn'),
   reset:   document.getElementById('resetBtn'),
   status:  document.getElementById('status'),
+  tunerNote:  document.getElementById('tunerNote'),
+  tunerCents: document.getElementById('tunerCents'),
+  dots:       document.getElementById('dots'),
+  bpmText:    document.getElementById('bpmText'),
+  metroBtn:   document.getElementById('metroBtn'),
+  droneNote:  document.getElementById('droneNote'),
+  droneHz:    document.getElementById('droneHz'),
+  droneState: document.getElementById('droneState'),
+  rowListen:  document.getElementById('rowListen'),
+  rowMetro:   document.getElementById('rowMetro'),
+  rowDrone:   document.getElementById('rowDrone'),
 };
 
 let ctx = null, analyser = null, stream = null, raf = 0;
@@ -274,6 +335,8 @@ function loop() {
   for (let i = 0; i < timeBuf.length; i++) rms += timeBuf[i] * timeBuf[i];
   rms = Math.sqrt(rms / timeBuf.length);
 
+  if (mode === 'tuner') { if (frames++ % 2 === 0) updateTuner(); return; }
+
   if (rms > 0.004) {
     analyser.getFloatFrequencyData(freqBuf);
     for (let i = 0; i < freqBuf.length; i++) mags[i] = Math.pow(10, freqBuf[i] / 20);
@@ -340,6 +403,171 @@ function draw() {
   }
 }
 
+// --- tuner: autocorrelation on the time-domain buffer -----------------------
+
+function detectPitch(buf, sr) {
+  const n = 2048;
+  let rms = 0;
+  for (let i = 0; i < n; i++) rms += buf[i] * buf[i];
+  if (Math.sqrt(rms / n) < 0.01) return -1;
+
+  const maxLag = n >> 1;
+  const c = new Float32Array(maxLag);
+  for (let lag = 0; lag < maxLag; lag++) {
+    let sum = 0;
+    for (let i = 0; i < n - lag; i++) sum += buf[i] * buf[i + lag];
+    c[lag] = sum;
+  }
+  if (c[0] <= 0) return -1;
+
+  let d = 1;
+  while (d < maxLag && c[d] > 0) d++;
+  let bestLag = -1, bestVal = 0;
+  for (let lag = d; lag < maxLag; lag++) if (c[lag] > bestVal) { bestVal = c[lag]; bestLag = lag; }
+  if (bestLag <= 0 || bestVal < 0.3 * c[0]) return -1;
+
+  const den = c[bestLag - 1] - 2 * c[bestLag] + c[bestLag + 1];
+  const shift = den !== 0 ? 0.5 * (c[bestLag - 1] - c[bestLag + 1]) / den : 0;
+  const freq = sr / (bestLag + shift);
+  return (freq >= 50 && freq <= 2000) ? freq : -1;
+}
+
+function updateTuner() {
+  const f = detectPitch(timeBuf, ctx.sampleRate);
+  if (f <= 0) { els.tunerCents.textContent = 'play a note'; return; }
+  const midi = 69 + 12 * Math.log2(f / A4);
+  const n = Math.round(midi);
+  const cents = Math.round((midi - n) * 100);
+  els.tunerNote.textContent = NOTES[((n % 12) + 12) % 12] + (Math.floor(n / 12) - 1);
+  els.tunerCents.textContent = (cents >= 0 ? '+' : '') + cents + ' ¢';
+}
+
+// --- metronome: scheduled on the audio clock, not setInterval ---------------
+
+const metro = { bpm: 90, on: false, beat: 0, next: 0, timer: 0, taps: [] };
+
+function audio() {
+  if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
+  if (ctx.state === 'suspended') ctx.resume();
+  return ctx;
+}
+
+function click(time, accent) {
+  const o = ctx.createOscillator(), g = ctx.createGain();
+  o.frequency.value = accent ? 1320 : 880;
+  g.gain.setValueAtTime(accent ? 0.4 : 0.2, time);
+  g.gain.exponentialRampToValueAtTime(0.001, time + 0.05);
+  o.connect(g).connect(ctx.destination);
+  o.start(time); o.stop(time + 0.06);
+}
+
+function schedule() {
+  // Look ahead on the audio clock so beats never drift, unlike setInterval.
+  while (metro.next < ctx.currentTime + 0.12) {
+    const accent = metro.beat % 4 === 0;
+    click(metro.next, accent);
+    const b = metro.beat % 4;
+    setTimeout(() => {
+      [...els.dots.children].forEach((d, i) => d.classList.toggle('now', i === b));
+      if (navigator.vibrate) navigator.vibrate(accent ? 35 : 15);
+    }, Math.max(0, (metro.next - ctx.currentTime) * 1000));
+    metro.next += 60 / metro.bpm;
+    metro.beat++;
+  }
+}
+
+function metroStart() {
+  audio();
+  metro.on = true; metro.beat = 0; metro.next = ctx.currentTime + 0.1;
+  metro.timer = setInterval(schedule, 25);
+  els.metroBtn.textContent = 'Stop';
+}
+function metroStop() {
+  metro.on = false; clearInterval(metro.timer);
+  [...els.dots.children].forEach(d => d.classList.remove('now'));
+  els.metroBtn.textContent = 'Start';
+}
+function setBpm(v) {
+  metro.bpm = Math.max(30, Math.min(240, Math.round(v)));
+  els.bpmText.textContent = metro.bpm;
+}
+
+// --- drone ------------------------------------------------------------------
+
+const drone = { voices: [], master: null };
+
+function droneTonic() { return state.current.tonic >= 0 ? state.current.tonic : 0; }
+
+function droneStart(withPa) {
+  audio();
+  droneStop();
+  // Detection is suspended while the drone plays: the mic would otherwise hear
+  // the speaker and lock onto the drone's own pitch. The hardware has the same
+  // problem at 70mm spacing and solves it the same way.
+  if (running) stop();
+
+  const t = droneTonic();
+  const f = A4 * Math.pow(2, (48 + t - 69) / 12);
+  const real = new Float32Array([0, 1, 0.55, 0.35, 0.2, 0.12, 0.07]);
+  const wave = ctx.createPeriodicWave(real, new Float32Array(real.length));
+
+  drone.master = ctx.createGain();
+  drone.master.gain.value = 1;
+  drone.master.connect(ctx.destination);
+
+  for (const [hz, level] of withPa ? [[f, 0.22], [f * Math.pow(2, 7 / 12), 0.14]] : [[f, 0.25]]) {
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.setPeriodicWave(wave); o.frequency.value = hz;
+    g.gain.setValueAtTime(0, ctx.currentTime);
+    g.gain.linearRampToValueAtTime(level, ctx.currentTime + 0.3);
+    o.connect(g).connect(drone.master); o.start();
+    drone.voices.push({ o, g });
+  }
+
+  els.droneNote.textContent = NOTES[t];
+  els.droneHz.textContent = (withPa ? 'Sa + Pa · ' : 'Sa · ') + f.toFixed(1) + ' Hz';
+  els.droneState.textContent = 'playing';
+}
+
+function droneStop() {
+  if (!drone.voices.length) return;
+  const t = ctx.currentTime;
+  drone.voices.forEach(({ o, g }) => {
+    g.gain.cancelScheduledValues(t);
+    g.gain.setValueAtTime(g.gain.value, t);
+    g.gain.linearRampToValueAtTime(0, t + 0.25);
+    try { o.stop(t + 0.3); } catch (e) {}
+  });
+  drone.voices = [];
+  els.droneState.textContent = 'stopped';
+}
+
+// --- modes ------------------------------------------------------------------
+
+let mode = 'scale';
+
+function setMode(m) {
+  mode = m;
+  for (const b of document.querySelectorAll('.modes button')) b.classList.toggle('on', b.dataset.mode === m);
+  for (const [k, id] of [['scale','viewScale'],['tuner','viewTuner'],['metro','viewMetro'],['drone','viewDrone']])
+    document.getElementById(id).classList.toggle('on', k === m);
+
+  els.rowListen.style.display = (m === 'scale' || m === 'tuner') ? 'flex' : 'none';
+  els.rowMetro.style.display  = m === 'metro' ? 'flex' : 'none';
+  els.rowDrone.style.display  = m === 'drone' ? 'flex' : 'none';
+  els.canvas.style.display    = m === 'scale' ? 'block' : 'none';
+  document.querySelector('.conf').style.display = m === 'scale' ? 'block' : 'none';
+
+  if (m === 'drone') {
+    const t = droneTonic();
+    els.droneNote.textContent = NOTES[t];
+    els.droneHz.textContent = 'Sa · ' + (A4 * Math.pow(2, (48 + t - 69) / 12)).toFixed(1) + ' Hz';
+    els.status.textContent = state.current.tonic >= 0
+      ? 'Tuned to the ' + NOTES[t] + ' the scale finder detected.'
+      : 'No scale detected yet, so this defaults to C. Find a scale first and it follows it.';
+  }
+}
+
 // --- wiring -----------------------------------------------------------------
 
 async function start() {
@@ -390,8 +618,34 @@ els.reset.addEventListener('click', () => {
   els.status.textContent = 'Cleared. Play something.';
 });
 
+for (const b of document.querySelectorAll('.modes button'))
+  b.addEventListener('click', () => setMode(b.dataset.mode));
+
+for (let i = 0; i < 4; i++) {
+  const d = document.createElement('span');
+  d.className = 'dot' + (i === 0 ? ' sam' : '');
+  els.dots.appendChild(d);
+}
+document.getElementById('bpmUp').addEventListener('click', () => setBpm(metro.bpm + 2));
+document.getElementById('bpmDown').addEventListener('click', () => setBpm(metro.bpm - 2));
+document.getElementById('tapBtn').addEventListener('click', () => {
+  const now = performance.now();
+  metro.taps.push(now);
+  if (metro.taps.length > 5) metro.taps.shift();
+  if (metro.taps.length < 2) return;
+  let sum = 0;
+  for (let i = 1; i < metro.taps.length; i++) sum += metro.taps[i] - metro.taps[i - 1];
+  setBpm(60000 / (sum / (metro.taps.length - 1)));
+});
+els.metroBtn.addEventListener('click', () => metro.on ? metroStop() : metroStart());
+
+document.getElementById('saBtn').addEventListener('click', () => droneStart(false));
+document.getElementById('saPaBtn').addEventListener('click', () => droneStart(true));
+document.getElementById('droneStop').addEventListener('click', droneStop);
+
 render();
 draw();
+setMode('scale');
 </script>
 </body>
 </html>

@@ -1,0 +1,11 @@
+# VS Code local history — editor scratch, not project history
+.history/
+
+# Build output
+selftest
+*.o
+*.out
+*.dSYM/
+
+# macOS
+.DS_Store

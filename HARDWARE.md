@@ -37,7 +37,7 @@ on the stand.
 | Buttons | 2× tactile 6mm | $0.20 | Mode, and tap-tempo. |
 | Haptics | Coin vibration motor + MOSFET | $1.00 | Upgrade to a DRV2605L + LRA later if you want a sharp tick instead of a buzz. |
 | Battery | 1000 mAh LiPo | $5.00 | ~8h runtime. |
-| Charging | MCP73831 + USB-C receptacle | $2.00 | |
+| Charging | TP4056 + USB-C receptacle | $2.00 | Matches `BOM.csv`. Swap to MCP73831 on the custom PCB if board area gets tight. |
 | PCB | 2-layer, JLCPCB, qty 5 | ~$4/ea | |
 | Enclosure | 3D printed, 2 shells | ~$1 | |
 | | **Total** | **~$31/unit** | |
@@ -47,6 +47,40 @@ At qty 5 you're around $130 for five working units, which is a sane funding ask.
 **Substitutions if you want to move faster:** a Teensy 4.1 ($32) has 600 MHz and an audio
 library that hands you FFT and I2S for free — much less firmware work, much worse cost story.
 Use ESP32-S3 unless the DSP fights you.
+
+---
+
+## 2b. Pin map
+
+One ESP32-S3-WROOM-1. **19 GPIO used of 36 available**, and both I2S peripherals — the mic
+and the amplifier need to run at the same time, which is the reason this part was chosen
+over an S2 or a classic ESP32.
+
+| Peripheral | Bus | Signal | GPIO |
+|---|---|---|---|
+| INMP441 mic | I2S0 | SCK | 4 |
+| | | WS | 5 |
+| | | SD | 6 |
+| | | L/R | GND |
+| MAX98357A amp | I2S1 | BCLK | 15 |
+| | | LRC | 16 |
+| | | DIN | 7 |
+| GC9A01 display | SPI | SCL | 12 |
+| | | SDA | 11 |
+| | | CS | 10 |
+| | | DC | 9 |
+| | | RST | 8 |
+| | | BLK | 14 |
+| EC11 encoder | GPIO | A | 17 |
+| | | B | 18 |
+| | | SW | 21 |
+| Buttons | GPIO | Mode | 13 |
+| | | Tap tempo | 2 |
+| Haptics | GPIO | Motor (via MOSFET) | 41 |
+| Power | ADC | VBAT sense | 1 |
+
+TP4056 feeds the 5V rail. Keep the I2S runs short and pour ground under them; keep the
+class-D amp away from the mic traces.
 
 ---
 
