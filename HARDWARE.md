@@ -52,9 +52,9 @@ Use ESP32-S3 unless the DSP fights you.
 
 ## 2b. Pin map
 
-One ESP32-S3-WROOM-1. **19 GPIO used of 36 available**, and both I2S peripherals — the mic
-and the amplifier need to run at the same time, which is the reason this part was chosen
-over an S2 or a classic ESP32.
+One ESP32-S3-WROOM-1-N8R2. **20 GPIO of 44**, and both I2S peripherals — the mic and the
+amplifier need to run at the same time, which is why this part was chosen over an S2 or a
+classic ESP32. Strapping pins GPIO0, 3, 45 and 46 are left clear.
 
 | Peripheral | Bus | Signal | GPIO |
 |---|---|---|---|
@@ -65,6 +65,7 @@ over an S2 or a classic ESP32.
 | MAX98357A amp | I2S1 | BCLK | 15 |
 | | | LRC | 16 |
 | | | DIN | 7 |
+| | | SD (shutdown / gain) | 38 |
 | GC9A01 display | SPI | SCL | 12 |
 | | | SDA | 11 |
 | | | CS | 10 |
@@ -77,10 +78,17 @@ over an S2 or a classic ESP32.
 | Buttons | GPIO | Mode | 13 |
 | | | Tap tempo | 2 |
 | Haptics | GPIO | Motor (via MOSFET) | 41 |
-| Power | ADC | VBAT sense | 1 |
+| Power | ADC | VBAT sense (via divider) | 1 |
 
-TP4056 feeds the 5V rail. Keep the I2S runs short and pour ground under them; keep the
-class-D amp away from the mic traces.
+`SD` on the MAX98357A is GPIO-controlled rather than hard-wired, so the amplifier can be
+muted during detection. That is the strongest defence against the device hearing its own
+drone, and it costs one pin.
+
+**VBAT sense needs a divider.** A full cell is 4.2V and the ADC maximum is 3.3V, so GPIO1
+must not connect to the battery directly. Two 100k resistors plus a 100nF cap.
+
+Keep the I2S runs short and pour ground under them; keep the class-D amp away from the mic
+traces. See `docs/power-and-signal.png` for the rail structure.
 
 ---
 
