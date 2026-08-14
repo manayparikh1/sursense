@@ -123,46 +123,21 @@ not connect straight to the battery. Two 100k resistors and a 100nF cap.
 
 ![Power and signal](docs/power-and-signal.png)
 
-Four rails. The class-D amplifier hangs directly off the battery node so its 700mA peaks
-never touch the rail the MCU and display share, and the microphone gets an LDO of its own.
-One ESP32-S3-WROOM-1-N8R2 carries everything, with both I2S peripherals running
-concurrently so the mic can capture while the amp drives the drone.
-
-USB-C feeds a TP4056 and an ideal-diode load-share path (Q1–Q4) in parallel, so the device
-runs while charging without the charger's termination logic being confused by the load.
-
 ### PCB placement
 
 ![PCB placement](docs/pcb-placement.png)
-![Placement table](docs/placement-table.png)
 
-Round 2-layer board, Ø70. Four bearings do four jobs: the speaker fires down at 0°, the
-bezel drive sits at 90°, the mic port is at 180° — as far from the driver as the shell
-allows — and the WROOM-1 antenna gets a copper-free wedge at 210°.
+![Placement table](docs/placement-table.png)
 
 ### Enclosure
 
 ![Enclosure section](docs/enclosure-section.png)
 
-Z datum is the PCB top face. The stack closes at 22.00mm with 0.2mm to spare, so there is
-no slack in it.
-
 ### Bezel coupling
 
 ![Bezel coupling](docs/bezel-coupling.png)
+
 ![Tolerances](docs/tolerances.png)
-
-The knurled bezel is the encoder. Two drive variants export against one identical bezel so
-both can be printed and compared: **A** is an 18 × 1.5 nitrile O-ring at 20% compression,
-**B** is a silicone tube sleeve. A printed spur gear was considered and rejected — it is
-audible, and the microphone is listening 30mm away while you turn it.
-
-At Ø21.00 against the Ø64.00 drive land, one bezel turn is 61 encoder detents, 5.9° each.
-
-### Still to draw
-
-- [ ] `hardware/` — KiCad schematic and 2-layer layout, from the placement table above
-- [ ] `cad/` — CadQuery script exporting STEP, from the section and tolerance tables
 
 ## Known possible risks
 
