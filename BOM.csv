@@ -1,22 +1,12 @@
-Part,Purpose,Link,Listing pack size,Unit price USD,Qty used in build,Line total USD
-ESP32-S3-DevKitC-1 (N8R2 or N16R8),"Main processor. One board runs everything: pitch-detection DSP on core 0, display and UI on core 1. PSRAM for the audio buffer; two I2S peripherals so the mic and amplifier run at the same time. Uses 19 GPIO of 44.",https://www.amazon.ca/dp/B0FN7XGYGS,1,14.24,1,14.24
-INMP441 I2S microphone,"Captures the instrument for scale detection and tuning. Digital I2S output, so no analog front-end.",https://www.amazon.ca/dp/B0C1C64R8S,5,3.68,1,18.39
-GC9A01 1.28 inch round display,"Shows the detected tonic, scale and sargam. Round format suits the tuner dial, taal cycle and circle-of-fifths views.",https://www.amazon.ca/dp/B0CJ5X6RJN,1,5.75,1,5.75
-MAX98357A I2S amplifier,"DAC and amplifier in one part so the processor drives the drone and metronome click directly.",https://www.amazon.ca/dp/B0DPJRLMDJ,2,5.67,1,11.33
-8 ohm 1W 28mm speaker,"Reproduces the drone and click, sized to fit inside the 70mm enclosure.",https://www.amazon.ca/dp/B019JMV0JY,4,1.80,1,7.19
-EC11 rotary encoder,"Sets tempo, pitch and mode. Friction-coupled to the knurled bezel so the whole ring turns.",https://www.amazon.ca/dp/B0C6Q67V97,6,5.50,1,32.98
-Coin vibration motor,"Pulses the beat so the player feels time instead of hearing it. Usable in an ensemble or under headphones.",https://www.amazon.ca/dp/B01MTOOQD1,5,1.65,1,8.27
-TP4056 USB-C charging module,"Charges the cell over USB-C with over-charge, over-discharge and over-current protection.",https://www.amazon.ca/dp/B0CD7H3XD7,3,2.28,1,6.84
-3.7V 1100mAh LiPo (603449),"Roughly 8 hours of untethered use. 34.5 x 51 x 6.3mm with a JST-PH 2.0 connector, so it fits inside the 70mm x 22mm puck.",https://www.amazon.ca/dp/B08FD39Y5R,1,13.53,1,13.53
-Breadboards + jumper wires,"Validate the full circuit and firmware before committing to a PCB.",https://www.amazon.ca/dp/B07JKKNDHK,3 + 3,17.99,1,17.99
-,,,,Subtotal USD,,136.51
-,,,,HST 13% (Ontario),,17.75
-,,,,Total USD,,154.26
-,,,,,,
-NOTE,"All prices USD, converted from live Amazon.ca CAD listings at 1 CAD = 0.72 USD (mid-market, 14 Aug 2026). CAD subtotal 189.62, CAD total 214.27.",,,,,
-NOTE,"ONE ESP32-S3 is used, not three. The previous link pointed at a 3-pack listing (now out of stock), which is why the parts list looked like it needed three processors. The design needs 20 GPIO and both I2S peripherals, which one S3 provides with room to spare. Pin map is in the README. Select the N8R2 or N16R8 variant on the listing; either works.",,,,,
-NOTE,"Several parts are sold only in multipacks. 'Unit price USD' is the pack price divided by pack size; 'Qty used in build' is the real board count. Line totals are what actually gets charged at checkout, since the whole pack must be bought.",,,,,
-NOTE,"All ten links were checked live on 14 Aug 2026 and were in stock at the prices shown. The EC11 6-pack is the single most expensive line at 32.98 USD; a smaller pack would cut it substantially if one is in stock at order time.",,,,,
-NOTE,"This is the PROTOTYPE BOM and it funds build phases 1-3: breadboard bring-up, accuracy measurement, and all four modes working. It is deliberately breakout modules, not bare ICs, so the firmware can be proven before any board is ordered.",,,,,
-NOTE,"The PCB design in docs/ is phase 4 and uses bare parts that are NOT in this list: ESP32-S3-WROOM-1 module, TP4056 SOP-8, TLV62569 buck, XC6206P332 LDO, AO3400A MOSFETs, USB-C 16P, JST-PH and JST-SH connectors, and passives. That is a separate and later spend, costed at about 31 USD per unit at quantity 5.",,,,,
-NOTE,"OPEN ITEM: the speaker. This BOM lists a 28mm round driver; the PCB placement in docs/ is drawn around a 24 x 14mm rectangular driver 4.5mm tall. Reconcile before ordering either the board or the speaker.",,,,,
+Part,Link,Note,Estimate $,Quantity
+ESP32,https://www.amazon.ca/dp/B0DFTKFWT2,"Main processor. Runs the pitch-detection DSP on one core and the display on the other, with PSRAM for the audio buffer and both I2S peripherals so the mic and amp run at once.",28.83,1
+INMP441 I2S mic,https://www.amazon.ca/dp/B0C1C64R8S,"Captures the instrument for scale detection and tuning, with a digital output that avoids any analog front-end.",15.85,1
+"GC9A01 1.28"" round display",https://www.amazon.ca/dp/B0CJ5X6RJN,"Shows the tonic, scale and sargam. The round format suits the tuner dial, taal cycle and circle-of-fifths views.",5.77,1
+MAX98357A I2S amp,https://www.amazon.ca/dp/B0DPJRLMDJ,"Combines the DAC and amplifier in one part so the processor drives the drone and metronome click directly.",11.53,1
+EC11 rotary encoder,https://www.amazon.ca/dp/B0C6Q67V97,"Sets the tempo, pitch and mode, coupled to the knurled bezel so the whole ring turns and can be adjusted by feel.",33.02,1
+8 ohm 1W 28mm speaker,https://www.amazon.ca/dp/B019JMV0JY,"Reproduces the drone and click, sized to fit the 70mm enclosure.",7.21,1
+Coin vibration motor,https://www.amazon.ca/dp/B01MTOOQD1,"Pulses the beat so the player feels time instead of hearing it, making the metronome usable in an ensemble or under headphones.",8.3,1
+TP4056 USB-C charger,https://www.amazon.ca/dp/B09MJXV784,"Charges the cell over USB-C with over-charge, over-discharge and short-circuit protection.",9.37,1
+3.7V 1000mAh LiPo,https://www.amazon.ca/dp/B0CNLPBM2L,"Gives about 8 hours of untethered use so the device works on a music stand rather than beside an outlet.",24.14,1
+Jumper wires + breadboard,https://www.amazon.ca/dp/B07JKKNDHK,"Validate the full circuit and firmware before committing to a PCB, so design errors are caught while they cost nothing.",18.73,1
+,,,Total: ~$162.75 USD,Total items: 10

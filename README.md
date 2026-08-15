@@ -74,12 +74,10 @@ instrument. It's the same idea as the dial on my AC unit at home.
 BOM.csv is also in a sheet:
 https://docs.google.com/spreadsheets/d/1nKPMvtGOhtMLgeP8bByzdkwNMy8-5KtI2vqGwreh8vg/edit?usp=sharing
 
-Total is $154.26 USD, converted from Amazon.ca listings at 1 CAD = 0.72 USD. Every link was
-checked in stock on 14 Aug 2026.
+Total is about $162.75 USD across ten items, converted from Amazon.ca listings.
 
-One ESP32-S3, not three. The old BOM linked a 3-pack listing so it looked like the build
-needed three processors. It needs one. A few other parts only sell in multipacks, so the
-BOM lists pack size and board count separately now.
+One ESP32-S3, not three. The build only ever needed one processor. Some of the parts only
+sell in multipacks, which is why a few line items cost more than a single unit would.
 
 ### Pin map
 
