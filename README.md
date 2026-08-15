@@ -1,21 +1,23 @@
 # SurSense
 
-A small palm-sized device that listens to you when you play and it works out the scale and also gives you a drone of that scale to practice against.
+A palm-sized puck that listens to you play, works out what scale you're in, and drones
+along with you.
 
 Point it at an instrument and it names the tonic and the scale in both Western and Indian
-notation — "C# Kafi / Dorian" — then plays a tanpura drone tuned to that tonic. It is also
-a chromatic tuner and a metronome with taal cycles like teental, plus a silent haptic mode.
+notation, like "C# Kafi / Dorian", then plays a tanpura drone tuned to that tonic. It's
+also a chromatic tuner and a metronome that knows taal cycles like teental, with a silent
+haptic mode so you can use it in an ensemble.
 
 Every tuner tells you one note. Almost nothing tells you what key the whole piece is in,
-and nothing does it with sargam and an attached drone.
-
+and nothing I've found does it with sargam and a drone attached.
 
 ## Status
 
-The detection algorithm is written, builds, and is tested. The hardware is designed and specified but not yet built - this repo is the design and the working software that will run on it.
+The detection algorithm is written and tested. The hardware is designed but not built yet,
+so right now this repo is the design plus the software that will run on it.
 
-**Self-test: tonic 24/24.** Twelve synthesized scales per mode, one for each tonic, passed
-through the detection pipeline and checked against the answer.
+The self-test scores 24 out of 24 on tonic detection. It generates twelve synthesized
+scales per mode, one for each tonic, runs them through the pipeline and checks the answer.
 
 ## Test it
 
@@ -23,99 +25,84 @@ through the detection pipeline and checked against the answer.
 cd sur && clang++ -std=c++17 -O2 -Wall -Wextra -o selftest sur.cpp selftest.cpp && ./selftest
 ```
 
-Takes a few seconds. No special hardware, no libraries, no build system. Compiles clean
-under `-Wall -Wextra`.
+Takes a few seconds. No hardware, no libraries, no build system. Compiles clean under
+-Wall -Wextra.
 
 ## How it works
 
-1. FFT the input sound, detect peaks in its spectrum, with parabolic interpolation
-   to ensure that the low tones fall on the correct semitones.
-2. Map those peaks into 12 pitch classes, depending on the proximity of each peak
-   to the center of a semitone. Summarize for a few seconds.
-3. Compare the result with the Krumhansl-Schmuckler probe-tone profile for all 12
-   rotations in order to determine the tonic pitch.
-4. Resolve ambiguities of major-minor modality with a second accumulator,
-   decaying more slowly: the tone class that remains active longest will be tonic.
-5. Compare the rest of the spectrum with scale candidates.
-6. Make the output decisions persistent with a locking state machine: lock
-   easily but unlock reluctantly to avoid oscillations on the display screen.
+1. FFT the incoming audio and find the peaks, with parabolic interpolation so low notes
+   land on the right semitone instead of smearing across two.
+2. Fold those peaks into 12 pitch classes, weighted by how close each peak sits to the
+   centre of a semitone. Accumulate over a few seconds.
+3. Correlate against the Krumhansl-Schmuckler probe-tone profile at all 12 rotations to
+   find the tonic.
+4. Break major/minor ties with a second accumulator that decays more slowly. Whichever
+   pitch class stays lit longest is the tonic.
+5. Match what's left against the scale candidates.
+6. Hold the answer with a locking state machine. Lock easily, unlock reluctantly, so the
+   display isn't flickering between two guesses.
 
-Step 4 is the part that is not from a paper. C major and A minor contain identical notes,
-so correlation alone cannot separate them. Measuring which pitch class is *sustained*
-rather than merely present resolves it.
+Step 4 is the bit I didn't get from a paper. C major and A minor use identical notes, so
+correlation on its own can't tell them apart. What separates them is which note is being
+*sustained* rather than just present.
 
-That claim is measurable, so here is the ablation. The self-test holds the tonic for 0.6s
-and the other degrees for 0.3s, which is what the sustain bias exploits:
+I wanted to check that actually mattered, so I measured it. The self-test holds the tonic
+for 0.6s and everything else for 0.3s, and that difference is exactly what the sustain bias
+reads. As written it scores 24/24, and turning the bias off only drops it to 23/24, because
+the timing cue is still there in other ways. Equalise every note to 0.3s and it falls to
+21/24 with the bias on, and 14/24 with it off. So the bias is doing real work, but it's a
+seven-point difference, not the difference between working and not working.
 
-| Sustain bias | Note durations | Tonic |
-|---|---|---|
-| on (`kSustainBias = 0.18`) | as written | **24 / 24** |
-| off | as written | 23 / 24 |
-| on | equalised to 0.3s | 21 / 24 |
-| off | equalised to 0.3s | **14 / 24** |
+## What it can't do
 
-Equalising durations removes the cue the bias reads, and turning the bias off on top of
-that costs another seven. So it carries real weight, not decoration — but the honest
-version is 21→14, not a collapse.
+The self-test is synthetic and I wrote both the detector and the grader, so it proves my
+implementation matches my intent. It doesn't prove the thing survives a real room.
 
-## Honest Limits to this device
+Short phrases are undecidable no matter how good the code is. Five notes can't tell Dorian
+from natural minor if the note that distinguishes them never got played.
 
-- The self-test is synthetic, and I wrote both the detector and the grader. It
-  proves the implementation is correct, not that it survives real room audio.
-- Short phrases are undecidable in principle. Five notes cannot distinguish
-  Dorian from natural minor — the distinguishing degree was never played.
-- Percussion adds broadband energy and will reduce accuracy.
-- Nothing has run on hardware yet.
+Percussion dumps broadband energy across every bin and will drag accuracy down.
 
-## HARDWARE
+And nothing has run on hardware yet.
 
-A 70mm puck will be used so basically a knurled metal bezel is the rotary encoder — the whole ring turns so you can set the tempo without looking while holding an instrument. It is kinda like my AC system which turns and you can set the temperature from it like that. 
+## Hardware
 
-BOM.csv is in sheets: https://docs.google.com/spreadsheets/d/1nKPMvtGOhtMLgeP8bByzdkwNMy8-5KtI2vqGwreh8vg/edit?usp=sharing
+70mm puck, 22mm tall. The knurled metal bezel is the rotary encoder, so the whole ring
+turns and you can set tempo by feel without looking down while you're holding an
+instrument. It's the same idea as the dial on my AC unit at home.
 
-**Total: $154.26 USD**, converted from live Amazon.ca listings at 1 CAD = 0.72 USD. Every
-link was checked in stock on 14 Aug 2026.
+BOM.csv is also in a sheet:
+https://docs.google.com/spreadsheets/d/1nKPMvtGOhtMLgeP8bByzdkwNMy8-5KtI2vqGwreh8vg/edit?usp=sharing
 
-**One ESP32-S3, not three.** The old BOM linked a 3-pack listing, so clicking through
-suggested the build needed three processors. It needs one. Several other parts are sold
-only in multipacks, so the BOM now lists pack size and board count in separate columns and
-prices each line at what checkout actually charges.
+Total is $154.26 USD, converted from Amazon.ca listings at 1 CAD = 0.72 USD. Every link was
+checked in stock on 14 Aug 2026.
+
+One ESP32-S3, not three. The old BOM linked a 3-pack listing so it looked like the build
+needed three processors. It needs one. A few other parts only sell in multipacks, so the
+BOM lists pack size and board count separately now.
 
 ### Pin map
 
-One ESP32-S3-WROOM-1-N8R2. **20 GPIO of 44**, and both I2S peripherals — the mic and the
-amplifier run at the same time, which is why this part was chosen over an S2 or a classic
-ESP32. Strapping pins GPIO0, 3, 45 and 46 are left clear.
+One ESP32-S3-WROOM-1-N8R2, 20 GPIO out of 44. Both I2S peripherals are in use, which is the
+whole reason for the S3 over an S2 or a classic ESP32: the mic has to capture while the amp
+drives the drone. Strapping pins 0, 3, 45 and 46 are left alone.
 
-| Peripheral | Bus | Signal | GPIO |
-|---|---|---|---|
-| INMP441 mic | I2S0 | SCK | 4 |
-| | | WS | 5 |
-| | | SD | 6 |
-| | | L/R | GND |
-| MAX98357A amp | I2S1 | BCLK | 15 |
-| | | LRC | 16 |
-| | | DIN | 7 |
-| | | SD (shutdown / gain) | 38 |
-| GC9A01 display | SPI | SCL | 12 |
-| | | SDA | 11 |
-| | | CS | 10 |
-| | | DC | 9 |
-| | | RST | 8 |
-| | | BLK | 14 |
-| EC11 encoder | GPIO | A | 17 |
-| | | B | 18 |
-| | | SW | 21 |
-| Buttons | GPIO | Mode | 13 |
-| | | Tap tempo | 2 |
-| Haptics | GPIO | Motor (via MOSFET) | 41 |
-| Power | ADC | VBAT sense (via divider) | 1 |
+```
+INMP441 mic  (I2S0)   SCK 4    WS 5     SD 6     L/R to GND
+MAX98357A    (I2S1)   BCLK 15  LRC 16   DIN 7    SD 38
+GC9A01       (SPI)    SCL 12   SDA 11   CS 10    DC 9   RST 8   BLK 14
+EC11 encoder          A 17     B 18     SW 21
+Buttons               Mode 13  Tap 2
+Coin motor            41 (through a MOSFET)
+VBAT sense            1  (through a divider)
+```
 
-`SD` on the amplifier is GPIO-controlled rather than hard-wired, so the amp can be muted
-during detection — the main defence against the device hearing its own drone.
+SD on the amplifier runs off a GPIO instead of being hard-wired, so the amp can be muted
+while detection is running. That's the main thing stopping the device from hearing its own
+drone and locking onto it.
 
-VBAT sense needs a divider: a full cell is 4.2V and the ADC maximum is 3.3V, so GPIO1 must
-not connect straight to the battery. Two 100k resistors and a 100nF cap.
+VBAT sense needs a divider. A full cell sits at 4.2V and the ADC tops out at 3.3V, so GPIO1
+can't go straight to the battery. Two 100k resistors and a 100nF cap.
 
 ## Design
 
@@ -139,20 +126,22 @@ not connect straight to the battery. Two 100k resistors and a 100nF cap.
 
 ![Tolerances](docs/tolerances.png)
 
-## Known possible risks
+## What I think will go wrong
 
-- **Feedback.** Mic and speaker are 70mm apart. If the drone plays while detection runs,
-  the device may hear itself and lock onto its own output. Handled by mode exclusivity
-  plus notching the known drone pitches.
-- **Bezel coupling.** Driving an EC11 from a printed knurled ring is the most
-  likely thing to feel rough in v1. Budget three revisions.
-- **First PCB.** Even odds it needs a respin, which is why it gets ordered the
-  day the breadboard prototype works.
+Feedback. The mic and the speaker live in the same shell. If the drone plays while
+detection is running the device can hear itself and lock onto its own output, which looks
+like it's working perfectly and is actually a loop. Mode exclusivity plus notching out the
+drone's own pitches should handle it.
 
-## Documents
+The bezel. Driving an EC11 from a printed knurled ring is the part most likely to feel
+rough in v1. I'm budgeting three revisions and printing two different couplings to compare.
 
-- `BOM.csv` — bill of materials, USD
-- `sur/` — the detector and its self-test
-- `docs/` — design documents
+The first PCB. Even odds it needs a respin, which is why it gets ordered the day the
+breadboard version works rather than before.
 
-**OVERALL THIS WILL REALLY HELP MUSICIANS AND I HOPE I GET THE PARTS SO I CAN MAKE IT INTO A REAL PRODUCT**
+## Files
+
+BOM.csv is the parts list. sur/ has the detector and its self-test. docs/ has the design
+drawings.
+
+I really think this would help a lot of musicians and I'd love to actually build it.
