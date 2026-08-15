@@ -1,31 +1,31 @@
 # SurSense
 
-A palm-sized puck that listens to you play, works out what scale you're in, and drones
-along with you.
+OK so I have been planning this out for years and finally its happening. A palm-sized puck that listens to you play, works out what scale you're in, and drones
+along with you playing.
 
-Point it at an instrument and it names the tonic and the scale in both Western and Indian
+Point it at an instrument and with its mic it names the tonic and the scale in both Western and Indian
 notation, like "C# Kafi / Dorian", then plays a tanpura drone tuned to that tonic. It's
 also a chromatic tuner and a metronome that knows taal cycles like teental, with a silent
 haptic mode so you can use it in an ensemble.
 
-Every tuner tells you one note. Almost nothing tells you what key the whole piece is in,
-and nothing I've found does it with sargam and a drone attached.
+Every tuner tells you one note. BUT almost nothing tells you what key the whole piece is in,
+and nothing I've found does it with sargam and a drone attached. So I solved that...
 
 ## Status
 
-The detection algorithm is written and tested. The hardware is designed but not built yet,
+The detection algorithm is written and tested by me so thats done. The hardware is designed but not built yet because funding is still needed,
 so right now this repo is the design plus the software that will run on it.
 
-The self-test scores 24 out of 24 on tonic detection. It generates twelve synthesized
-scales per mode, one for each tonic, runs them through the pipeline and checks the answer.
+The self-test scores 24 out of 24 on tonic detection so it works obviously. It generates twelve synthesized
+scales per mode, one for each tonic, runs them through the pipeline AND checks the answer in the same time.
 
 ## Test it
 
-```bash
-cd sur && clang++ -std=c++17 -O2 -Wall -Wextra -o selftest sur.cpp selftest.cpp && ./selftest
-```
+To test it all you gotta run is this:
 
-Takes a few seconds. No hardware, no libraries, no build system. Compiles clean under
+cd sur && clang++ -std=c++17 -O2 -Wall -Wextra -o selftest sur.cpp selftest.cpp && ./selftest
+
+THIS WILL ONLY TAKE A FEW SECONDS TRUST LOL. No hardware, no libraries, no build system. Compiles clean under
 -Wall -Wextra.
 
 ## How it works
@@ -44,14 +44,16 @@ Takes a few seconds. No hardware, no libraries, no build system. Compiles clean 
 
 Step 4 is the bit I didn't get from a paper. C major and A minor use identical notes, so
 correlation on its own can't tell them apart. What separates them is which note is being
-*sustained* rather than just present.
+*sustained* rather than just present which I learned after a good time of research.
+
+THIS IS HOW I TESTED:
 
 I wanted to check that actually mattered, so I measured it. The self-test holds the tonic
 for 0.6s and everything else for 0.3s, and that difference is exactly what the sustain bias
 reads. As written it scores 24/24, and turning the bias off only drops it to 23/24, because
 the timing cue is still there in other ways. Equalise every note to 0.3s and it falls to
 21/24 with the bias on, and 14/24 with it off. So the bias is doing real work, but it's a
-seven-point difference, not the difference between working and not working.
+seven-point difference, not the difference between working and not working. 
 
 ## What it can't do
 
@@ -61,9 +63,11 @@ implementation matches my intent. It doesn't prove the thing survives a real roo
 Short phrases are undecidable no matter how good the code is. Five notes can't tell Dorian
 from natural minor if the note that distinguishes them never got played.
 
-Percussion dumps broadband energy across every bin and will drag accuracy down.
+Percussion dumps energy across every bin and will drag accuracy down so yeah.
 
 And nothing has run on hardware yet.
+
+BUT WE WILL FIX MOSTLY ALLLLL OF THAT once the hardware arrives because I am going full-in in this project.
 
 ## Hardware
 
@@ -71,29 +75,19 @@ And nothing has run on hardware yet.
 turns and you can set tempo by feel without looking down while you're holding an
 instrument. It's the same idea as the dial on my AC unit at home.
 
-BOM.csv is also in a sheet:
+BOM.csv is also in a sheet which was actually the original one before I made the one in the repo:
 https://docs.google.com/spreadsheets/d/1nKPMvtGOhtMLgeP8bByzdkwNMy8-5KtI2vqGwreh8vg/edit?usp=sharing
 
-Total is about $162.75 USD across ten items, converted from Amazon.ca listings.
+Total is approx $162.75 USD across ten items, converted from Amazon.ca listings but those prices can prolly flunctuate from times because it already happened to me once which was hectic.
 
 One ESP32-S3, not three. The build only ever needed one processor. Some of the parts only
-sell in multipacks, which is why a few line items cost more than a single unit would.
+sell in multipacks, which is why a few line items cost more than a single unit would but it will try to be used because I may need EXTRA pins because of a future plan I have.
 
 ### Pin map
 
 One ESP32-S3-WROOM-1-N8R2, 20 GPIO out of 44. Both I2S peripherals are in use, which is the
 whole reason for the S3 over an S2 or a classic ESP32: the mic has to capture while the amp
 drives the drone. Strapping pins 0, 3, 45 and 46 are left alone.
-
-```
-INMP441 mic  (I2S0)   SCK 4    WS 5     SD 6     L/R to GND
-MAX98357A    (I2S1)   BCLK 15  LRC 16   DIN 7    SD 38
-GC9A01       (SPI)    SCL 12   SDA 11   CS 10    DC 9   RST 8   BLK 14
-EC11 encoder          A 17     B 18     SW 21
-Buttons               Mode 13  Tap 2
-Coin motor            41 (through a MOSFET)
-VBAT sense            1  (through a divider)
-```
 
 SD on the amplifier runs off a GPIO instead of being hard-wired, so the amp can be muted
 while detection is running. That's the main thing stopping the device from hearing its own
@@ -137,9 +131,13 @@ rough in v1. I'm budgeting three revisions and printing two different couplings 
 The first PCB. Even odds it needs a respin, which is why it gets ordered the day the
 breadboard version works rather than before.
 
+**But lets hope for the best**
+
 ## Files
 
 BOM.csv is the parts list. sur/ has the detector and its self-test. docs/ has the design
 drawings.
 
-I really think this would help a lot of musicians and I'd love to actually build it.
+I really think this would help a lot of musicians and I'd love to actually build it and look honestly I play a bunch of instruments such as violin, flute, bansuri, harmonium, harmonica, ukulele, and EVEN the tenor sax. And what I have learned is that when playing in a band or something we need to know what scale everyone is playing in ... A FIXED scale which could change sometimes. So overall I hope you guys like this adioss.
+
+
