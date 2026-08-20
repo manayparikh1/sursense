@@ -9,3 +9,9 @@ selftest
 
 # macOS
 .DS_Store
+
+# KiCad lock and backup files
+*.lck
+~*
+*-backups/
+*.kicad_prl
