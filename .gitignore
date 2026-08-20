@@ -15,3 +15,5 @@ selftest
 ~*
 *-backups/
 *.kicad_prl
+__pycache__/
+*.pyc
